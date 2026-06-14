@@ -109,7 +109,7 @@ jobs:
 
           tar -C pleroma/release -czf "${versioned_tarball}" .
 
-          tar -tzf "${versioned_tarball}" | head -50
+          tar -tzf "${versioned_tarball}" | awk 'NR <= 50 { print }'
           sha256sum "${versioned_tarball}"
 
           echo "VERSIONED_TARBALL=${versioned_tarball}" >> "${GITHUB_ENV}"
