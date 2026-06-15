@@ -22,7 +22,7 @@ env:
   UPSTREAM_REPO: https://git.pleroma.social/pleroma/pleroma.git
   BUILD_IMAGE: docker.io/hexpm/elixir-arm64:1.17.3-erlang-27.3.4.2-ubuntu-noble-20250716
   RELEASE_TAG: pleroma-otp-${{ inputs.pleroma_tag }}-arm64-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
-  VERSIONED_TARBALL: pleroma-otp-${{ inputs.pleroma_tag }}-arm64-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}.tar.gz
+  VERSIONED_TARBALL: pleroma-otp-${{ inputs.pleroma_tag }}-arm64.tar.gz
   MIX_ENV: prod
   VIX_COMPILATION_MODE: PLATFORM_PROVIDED_LIBVIPS
   DEBIAN_FRONTEND: noninteractive
