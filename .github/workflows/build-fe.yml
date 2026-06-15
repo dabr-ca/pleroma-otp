@@ -1,0 +1,183 @@
+name: Build Pleroma FE
+
+run-name: Build Pleroma FE ${{ inputs.pleroma_fe_ref }}
+
+'on':
+  workflow_dispatch:
+    inputs:
+      pleroma_fe_ref:
+        description: Upstream Pleroma FE git ref to build, for example develop
+        required: true
+        default: develop
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pleroma-fe-${{ inputs.pleroma_fe_ref }}
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_REPO: https://git.pleroma.social/pleroma/pleroma-fe.git
+  BUILD_NODE_VERSION: 20.19.0
+  BUILD_YARN_VERSION: 1.22.22
+
+jobs:
+  build:
+    name: Build frontend zip
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Install system dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends git unzip zip
+
+      - name: Clone upstream ref
+        id: source
+        env:
+          PLEROMA_FE_REF: ${{ inputs.pleroma_fe_ref }}
+        run: |
+          set -euo pipefail
+
+          ref="${PLEROMA_FE_REF}"
+          if [[ ! "${ref}" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+            echo "::error::Ref must contain only letters, numbers, dots, underscores, hyphens, and slashes."
+            exit 1
+          fi
+
+          if [[ "${ref}" == /* || "${ref}" == -* || "${ref}" == *..* || "${ref}" == *@\{* || "${ref}" == *//* || "${ref}" == */ || "${ref}" == *. ]]; then
+            echo "::error::Ref is not a safe git ref or commit SHA."
+            exit 1
+          fi
+
+          release_ref="$(printf '%s' "${ref}" | sed -E 's#[^A-Za-z0-9._-]+#-#g; s#^-+##; s#-+$##')"
+          if [[ -z "${release_ref}" ]]; then
+            echo "::error::Ref produced an empty release label."
+            exit 1
+          fi
+          release_ref="${release_ref:0:80}"
+
+          git init pleroma-fe
+          git -C pleroma-fe remote add origin "${UPSTREAM_REPO}"
+
+          fetch_ref=''
+          if [[ "${ref}" == refs/heads/* ]]; then
+            branch="${ref#refs/heads/}"
+            if git ls-remote --exit-code --heads --refs "${UPSTREAM_REPO}" "refs/heads/${branch}" >/dev/null; then
+              fetch_ref="refs/heads/${branch}"
+            fi
+          elif [[ "${ref}" == refs/tags/* ]]; then
+            tag="${ref#refs/tags/}"
+            if git ls-remote --exit-code --tags --refs "${UPSTREAM_REPO}" "refs/tags/${tag}" >/dev/null; then
+              fetch_ref="refs/tags/${tag}"
+            fi
+          elif git ls-remote --exit-code --heads --refs "${UPSTREAM_REPO}" "refs/heads/${ref}" >/dev/null; then
+            fetch_ref="refs/heads/${ref}"
+          elif git ls-remote --exit-code --tags --refs "${UPSTREAM_REPO}" "refs/tags/${ref}" >/dev/null; then
+            fetch_ref="refs/tags/${ref}"
+          elif [[ "${ref}" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            fetch_ref="${ref}"
+          fi
+
+          if [[ -z "${fetch_ref}" ]]; then
+            echo "::error::Upstream ref '${ref}' was not found in ${UPSTREAM_REPO}."
+            exit 1
+          fi
+
+          git -C pleroma-fe fetch --depth 1 origin "${fetch_ref}"
+          git -C pleroma-fe checkout --detach FETCH_HEAD
+
+          upstream_sha="$(git -C pleroma-fe rev-parse HEAD)"
+          upstream_short_sha="$(git -C pleroma-fe rev-parse --short=8 HEAD)"
+          release_tag="pleroma-fe-${release_ref}-${upstream_short_sha}-run-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}"
+          versioned_zip="pleroma-fe-${release_ref}-${upstream_short_sha}.zip"
+
+          {
+            echo "upstream_sha=${upstream_sha}"
+            echo "upstream_short_sha=${upstream_short_sha}"
+            echo "release_ref=${release_ref}"
+            echo "release_tag=${release_tag}"
+            echo "versioned_zip=${versioned_zip}"
+          } >> "${GITHUB_OUTPUT}"
+
+          echo "Checked out ${ref} at ${upstream_sha}"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.BUILD_NODE_VERSION }}
+
+      - name: Show build environment
+        run: |
+          set -euo pipefail
+          node --version
+          corepack --version
+
+      - name: Install dependencies
+        working-directory: pleroma-fe
+        run: |
+          set -euo pipefail
+          corepack enable
+          corepack prepare "yarn@${BUILD_YARN_VERSION}" --activate
+          yarn --version
+          yarn --frozen-lockfile
+
+      - name: Build frontend
+        working-directory: pleroma-fe
+        run: |
+          set -euo pipefail
+          yarn build
+
+      - name: Verify built commit hash
+        env:
+          UPSTREAM_SHORT_SHA: ${{ steps.source.outputs.upstream_short_sha }}
+        run: |
+          set -euo pipefail
+
+          if ! grep -R -q --include 'main.*.js' -E "___pleromafe_commit_hash[[:space:]]*=[[:space:]]*\"${UPSTREAM_SHORT_SHA}\"" pleroma-fe/dist/static/js; then
+            echo "::error::Built frontend does not contain the expected commit hash ${UPSTREAM_SHORT_SHA}."
+            exit 1
+          fi
+
+      - name: Package zip
+        env:
+          VERSIONED_ZIP: ${{ steps.source.outputs.versioned_zip }}
+        run: |
+          set -euo pipefail
+
+          (cd pleroma-fe && zip -9qr "../${VERSIONED_ZIP}" dist)
+          zipinfo -1 "${VERSIONED_ZIP}" | awk 'NR <= 50 { print }'
+          sha256sum "${VERSIONED_ZIP}"
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.source.outputs.release_tag }}
+          target_commitish: ${{ github.sha }}
+          name: Pleroma FE ${{ inputs.pleroma_fe_ref }} ${{ steps.source.outputs.upstream_short_sha }} run ${{ github.run_id }} attempt ${{ github.run_attempt }}
+          make_latest: 'false'
+          overwrite_files: false
+          body: |
+            Upstream Pleroma FE ref: `${{ inputs.pleroma_fe_ref }}`
+            Upstream Pleroma FE commit: `${{ steps.source.outputs.upstream_sha }}`
+            Packaging release tag: `${{ steps.source.outputs.release_tag }}`
+            GitHub Actions run: `${{ github.run_id }}`
+            GitHub Actions run attempt: `${{ github.run_attempt }}`
+            Workflow commit: `${{ github.sha }}`
+            Node.js version: `${{ env.BUILD_NODE_VERSION }}`
+            Yarn version: `${{ env.BUILD_YARN_VERSION }}`
+
+            Immutable asset URL:
+            `${{ github.server_url }}/${{ github.repository }}/releases/download/${{ steps.source.outputs.release_tag }}/${{ steps.source.outputs.versioned_zip }}`
+          files: ${{ steps.source.outputs.versioned_zip }}
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
