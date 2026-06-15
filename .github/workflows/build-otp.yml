@@ -21,6 +21,8 @@ concurrency:
 env:
   UPSTREAM_REPO: https://git.pleroma.social/pleroma/pleroma.git
   BUILD_IMAGE: docker.io/hexpm/elixir-arm64:1.17.3-erlang-27.3.4.2-ubuntu-noble-20250716
+  RELEASE_TAG: pleroma-otp-${{ inputs.pleroma_tag }}-arm64-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+  VERSIONED_TARBALL: pleroma-otp-${{ inputs.pleroma_tag }}-arm64-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}.tar.gz
   MIX_ENV: prod
   VIX_COMPILATION_MODE: PLATFORM_PROVIDED_LIBVIPS
   DEBIAN_FRONTEND: noninteractive
@@ -100,35 +102,33 @@ jobs:
           mix release --path release
 
       - name: Package tarballs
-        env:
-          PLEROMA_TAG: ${{ inputs.pleroma_tag }}
         run: |
           set -euo pipefail
 
-          versioned_tarball="pleroma-otp-${PLEROMA_TAG}-arm64.tar.gz"
+          tar -C pleroma/release -czf "${VERSIONED_TARBALL}" .
 
-          tar -C pleroma/release -czf "${versioned_tarball}" .
-
-          tar -tzf "${versioned_tarball}" | awk 'NR <= 50 { print }'
-          sha256sum "${versioned_tarball}"
-
-          echo "VERSIONED_TARBALL=${versioned_tarball}" >> "${GITHUB_ENV}"
+          tar -tzf "${VERSIONED_TARBALL}" | awk 'NR <= 50 { print }'
+          sha256sum "${VERSIONED_TARBALL}"
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ inputs.pleroma_tag }}
+          tag_name: ${{ env.RELEASE_TAG }}
           target_commitish: ${{ github.sha }}
-          name: Pleroma OTP ${{ inputs.pleroma_tag }} arm64
-          make_latest: 'true'
-          overwrite_files: true
+          name: Pleroma OTP ${{ inputs.pleroma_tag }} arm64 run ${{ github.run_id }} attempt ${{ github.run_attempt }}
+          make_latest: 'false'
+          overwrite_files: false
           body: |
             Upstream Pleroma tag: `${{ inputs.pleroma_tag }}`
             Upstream Pleroma commit: `${{ env.UPSTREAM_SHA }}`
+            Packaging release tag: `${{ env.RELEASE_TAG }}`
+            GitHub Actions run: `${{ github.run_id }}`
+            GitHub Actions run attempt: `${{ github.run_attempt }}`
+            Workflow commit: `${{ github.sha }}`
             Build image: `${{ env.BUILD_IMAGE }}`
 
-            Stable versioned URL:
-            `${{ github.server_url }}/${{ github.repository }}/releases/download/${{ inputs.pleroma_tag }}/${{ env.VERSIONED_TARBALL }}`
+            Immutable asset URL:
+            `${{ github.server_url }}/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/${{ env.VERSIONED_TARBALL }}`
           files: ${{ env.VERSIONED_TARBALL }}
           fail_on_unmatched_files: true
         env:

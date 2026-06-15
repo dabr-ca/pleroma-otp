@@ -8,12 +8,12 @@ Pleroma tag, for example `v2.10.2`. The workflow clones
 builds the OTP release with the same core steps as upstream Woodpecker, and
 publishes:
 
-- `pleroma-otp-<tag>-arm64.tar.gz`
+- `pleroma-otp-<tag>-arm64-run-<run_id>-attempt-<run_attempt>.tar.gz`
 
-For Ansible, use the tag-specific release asset URL:
+For Ansible, use the immutable release asset URL from the GitHub release:
 
 ```text
-https://github.com/<owner>/<repo>/releases/download/<tag>/pleroma-otp-<tag>-arm64.tar.gz
+https://github.com/<owner>/<repo>/releases/download/pleroma-otp-<tag>-arm64-run-<run_id>-attempt-<run_attempt>/pleroma-otp-<tag>-arm64-run-<run_id>-attempt-<run_attempt>.tar.gz
 ```
 
 The tarball contains the contents of Pleroma's generated `release/` directory,
