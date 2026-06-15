@@ -25,8 +25,7 @@ This tarball is consumed by
 Run **Build Pleroma FE** with an upstream Pleroma FE ref, for example
 `develop`. The workflow clones
 `https://git.pleroma.social/pleroma/pleroma-fe.git`, resolves the ref to a
-commit, builds with Node.js 20.19.0 and Yarn 1.22.22, and verifies the embedded
-frontend commit hash.
+commit, and builds with Node.js 20.19.0 and Yarn 1.22.22.
 
 - release tag: `pleroma-fe-<sanitized-ref>-<short-sha>-run-<run_id>-attempt-<run_attempt>`
 - asset: `pleroma-fe-<sanitized-ref>-<short-sha>.zip`

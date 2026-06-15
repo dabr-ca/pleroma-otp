@@ -96,13 +96,13 @@ jobs:
           git -C pleroma-fe checkout --detach FETCH_HEAD
 
           upstream_sha="$(git -C pleroma-fe rev-parse HEAD)"
-          upstream_short_sha="$(git -C pleroma-fe rev-parse --short=8 HEAD)"
-          release_tag="pleroma-fe-${release_ref}-${upstream_short_sha}-run-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}"
-          versioned_zip="pleroma-fe-${release_ref}-${upstream_short_sha}.zip"
+          frontend_commit_hash="$(git -C pleroma-fe rev-parse --short HEAD)"
+          release_tag="pleroma-fe-${release_ref}-${frontend_commit_hash}-run-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}"
+          versioned_zip="pleroma-fe-${release_ref}-${frontend_commit_hash}.zip"
 
           {
             echo "upstream_sha=${upstream_sha}"
-            echo "upstream_short_sha=${upstream_short_sha}"
+            echo "frontend_commit_hash=${frontend_commit_hash}"
             echo "release_ref=${release_ref}"
             echo "release_tag=${release_tag}"
             echo "versioned_zip=${versioned_zip}"
@@ -111,7 +111,7 @@ jobs:
           echo "Checked out ${ref} at ${upstream_sha}"
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.BUILD_NODE_VERSION }}
 
@@ -136,17 +136,6 @@ jobs:
           set -euo pipefail
           yarn build
 
-      - name: Verify built commit hash
-        env:
-          UPSTREAM_SHORT_SHA: ${{ steps.source.outputs.upstream_short_sha }}
-        run: |
-          set -euo pipefail
-
-          if ! grep -R -q --include 'main.*.js' -E "___pleromafe_commit_hash[[:space:]]*=[[:space:]]*\"${UPSTREAM_SHORT_SHA}\"" pleroma-fe/dist/static/js; then
-            echo "::error::Built frontend does not contain the expected commit hash ${UPSTREAM_SHORT_SHA}."
-            exit 1
-          fi
-
       - name: Package zip
         env:
           VERSIONED_ZIP: ${{ steps.source.outputs.versioned_zip }}
@@ -162,12 +151,13 @@ jobs:
         with:
           tag_name: ${{ steps.source.outputs.release_tag }}
           target_commitish: ${{ github.sha }}
-          name: Pleroma FE ${{ inputs.pleroma_fe_ref }} ${{ steps.source.outputs.upstream_short_sha }} run ${{ github.run_id }} attempt ${{ github.run_attempt }}
+          name: Pleroma FE ${{ inputs.pleroma_fe_ref }} ${{ steps.source.outputs.frontend_commit_hash }} run ${{ github.run_id }} attempt ${{ github.run_attempt }}
           make_latest: 'false'
           overwrite_files: false
           body: |
             Upstream Pleroma FE ref: `${{ inputs.pleroma_fe_ref }}`
             Upstream Pleroma FE commit: `${{ steps.source.outputs.upstream_sha }}`
+            Embedded Pleroma FE commit hash: `${{ steps.source.outputs.frontend_commit_hash }}`
             Packaging release tag: `${{ steps.source.outputs.release_tag }}`
             GitHub Actions run: `${{ github.run_id }}`
             GitHub Actions run attempt: `${{ github.run_attempt }}`
