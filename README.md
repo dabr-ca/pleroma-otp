@@ -10,11 +10,4 @@ publishes:
 
 - `pleroma-otp-<tag>-arm64-run-<run_id>-attempt-<run_attempt>.tar.gz`
 
-For Ansible, use the immutable release asset URL from the GitHub release:
-
-```text
-https://github.com/<owner>/<repo>/releases/download/pleroma-otp-<tag>-arm64-run-<run_id>-attempt-<run_attempt>/pleroma-otp-<tag>-arm64-run-<run_id>-attempt-<run_attempt>.tar.gz
-```
-
-The tarball contains the contents of Pleroma's generated `release/` directory,
-not the `release/` directory itself. Extract it directly into `/opt/pleroma`.
+The release URL is immutable. The tarball is used by [`dabr-ca/config`](https://github.com/dabr-ca/config/blob/013018ad994cfb9a16489fc62be16cafc91fc43f/roles/pleroma/defaults/main.yaml#L2-L3).
